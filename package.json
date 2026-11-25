@@ -1,0 +1,73 @@
+{
+  "name": "bilimini",
+  "version": "1.0.0",
+  "description": "哔哩哔哩桌面客户端",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "win64": "electron-builder --x64",
+    "win32": "electron-builder --ia32",
+    "mac": "electron-builder --mac",
+    "linux": "electron-builder --linux appimage"
+  },
+  "devDependencies": {
+    "electron": "^11.5.0",
+    "electron-builder": "^22.9.1"
+  },
+  "build": {
+    "appId": "com.electron.bilimini",
+    "productName": "bilimini",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "artifactName": "bilimini-Setup-${version}.${ext}",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "bilimini"
+    },
+    "mac": {
+      "category": "Network"
+    },
+    "linux": {
+      "category": "Network",
+      "icon": "build/icon256.png"
+    }
+  },
+  "dependencies": {
+    "electron-is-accelerator": "^0.1.2",
+    "electron-store": "^8.0.1",
+    "graceful-fs": "^4.2.6"
+  },
+  "allowScripts": {
+    "electron@11.5.0": true,
+    "core-js@3.16.3": true
+  },
+  "author": "bilimini-desktop",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Foxvest/bilibili-mini.git"
+  },
+  "homepage": "https://github.com/Foxvest/bilibili-mini#readme",
+  "keywords": [
+    "bilibili",
+    "electron",
+    "desktop",
+    "bilimini"
+  ],
+  "license": "UNLICENSED"
+}
