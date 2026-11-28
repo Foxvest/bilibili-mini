@@ -180,6 +180,44 @@ body.win .showAbout #topbar {
   font-size: 13px;
   line-height: 12px;
 }
+/* 倍速按钮：显示当前速率的文字按钮 */
+#app-speed {
+  border-radius: 8px;
+  font-size: 10px;
+  line-height: 15px;
+  padding: 0 5px;
+}
+/* 倍速下拉菜单：展开时悬浮在 webview 之上，右缘对准倍速按钮 */
+#speed-menu {
+  background: #f25d8e;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+  display: none;
+  padding: 4px 0;
+  position: absolute;
+  right: 86px;
+  top: 36px;
+  width: 78px;
+  z-index: 12;
+}
+#speed-menu.active {
+  display: block;
+}
+.speed-item {
+  color: #fb93ab;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 26px;
+  text-align: center;
+}
+.speed-item:hover {
+  background: #fb93ab;
+  color: #fff;
+}
+.speed-item.on {
+  color: #fff;
+  font-weight: bold;
+}
 #dragzone {
   -webkit-user-select: none;
   -webkit-app-region: drag;

@@ -263,9 +263,52 @@ const v = new Vue({
     naviCanGoForward: false,
     showAboutOverlay: false,
     disableDanmakuButton: true,
-    disablePartButton: true
+    disablePartButton: true,
+    // 倍速：只在播放页可用，不跨视频记忆
+    speedOptions: [0.75, 1.0, 1.25, 2.0],
+    currentSpeed: 1,
+    speedMenuShow: false,
+    disableSpeedButton: true
   },
   methods: {
+    // 倍速显示：0.75x / 1x / 1.25x / 2x
+    fmtSpeed: function(s) {
+      return (Math.round(s * 100) / 100) + 'x';
+    },
+    // 显示倍速菜单（鼠标悬停按钮时）
+    showSpeedMenu: function() {
+      if(this.disableSpeedButton) {
+        return false;
+      }
+      clearTimeout(this._hideSpeedTimer);
+      this.speedMenuShow = true;
+    },
+    // 鼠标离开按钮/菜单后稍作延迟再收起，留出移入菜单的时间
+    scheduleHideSpeedMenu: function() {
+      clearTimeout(this._hideSpeedTimer);
+      this._hideSpeedTimer = setTimeout(() => {
+        this.speedMenuShow = false;
+      }, 220);
+    },
+    cancelHideSpeedMenu: function() {
+      clearTimeout(this._hideSpeedTimer);
+    },
+    toggleSpeedMenu: function() {
+      if(this.disableSpeedButton) {
+        return false;
+      }
+      this.speedMenuShow = !this.speedMenuShow;
+    },
+    // 选中一个倍速档位
+    selectSpeed: function(s) {
+      if(this.disableSpeedButton) {
+        return false;
+      }
+      this.currentSpeed = s;
+      this.speedMenuShow = false;
+      utils.log(`主窗口：设置倍速 ${this.fmtSpeed(s)}`);
+      wv.send('set-speed', s);
+    },
     // 后退
     naviBack: function() {
       _history.goBack();
@@ -333,8 +376,17 @@ const v = new Vue({
         return false;
       }
       utils.log('主窗口：点击弹幕开关');
-      // 2018-12-05 适配最新B站弹幕开关
-      wv.executeJavaScript(`document.querySelector('.bilibili-player-video-danmaku-switch .bui-switch-input').click()`);
+      // 新版 bpx 播放器的弹幕开关是 bpx-player-dm-switch 里的 checkbox（2023 后），
+      // 旧版是 bilibili-player-video-danmaku-switch 里的 input（2018 适配）。
+      // 两个都试，且查询不到时不再抛 null.click() 的页面错误
+      wv.executeJavaScript(`
+        (function(){
+          var sw = document.querySelector('.bpx-player-dm-switch .bui-danmaku-switch-input') ||
+                   document.querySelector('.bilibili-player-video-danmaku-switch .bui-switch-input');
+          if( sw ) { sw.click(); return 'clicked'; }
+          return 'switch-not-found';
+        })()
+      `);
     }
   }
 });
@@ -361,23 +413,23 @@ function checkUpdateOnInit() {
 
 // 当用户缩放窗口时保存窗口尺寸
 // 关键：程序自己切换窗口尺寸时也会触发 resize，那种情况下不能记录，
-// 否则会把「播放页的临时尺寸」写进「主页的尺寸槽」，导致回主页时窗口形状错乱
-var suppressSizeSave = 0;
+// 否则会把「播放页的临时尺寸」写进「主页的尺寸槽」，导致回主页时窗口形状错乱。
+// 判断方式：记录每次程序设置的目标尺寸，resize 到达时若与目标一致（±3px，容忍 DPI 取整）就跳过。
+// 不用「限时屏蔽」：Windows 对窗口调整有节流，resize 事件可能迟到，
+// 时间窗口过期后程序尺寸仍会被当成用户拖动存进配置
+var programSizes = {};
 function saveWindowSizeOnResize() {
   var saveWindowSizeTimer;
   window.addEventListener('resize', function() {
-    // 程序主动调尺寸期间忽略，避免污染用户设置
-    if( suppressSizeSave > 0 ) {
-      return;
-    }
     clearTimeout(saveWindowSizeTimer);
     saveWindowSizeTimer = setTimeout(function() {
-      // 计时器到期时如果仍处在程序调尺寸过程中，也不记录
-      if( suppressSizeSave > 0 ) {
+      const newSize = [window.innerWidth, window.innerHeight];
+      // 程序设置的目标尺寸与本次 resize 一致 → 是程序改的，不记录
+      const program = programSizes[currentWindowType];
+      if( program && Math.abs(program[0] - newSize[0]) <= 3 && Math.abs(program[1] - newSize[1]) <= 3 ) {
         return;
       }
       const currentSize = utils.config.get(currentWindowType);
-      const newSize = [window.innerWidth, window.innerHeight];
       if( (currentSize[0] != newSize[0]) || (currentSize[1] != newSize[1]) ) {
         utils.config.set(currentWindowType, newSize);
       }
@@ -429,18 +481,14 @@ function applyWindowType(targetWindowType) {
 
   // 窗口尺寸统一交给主进程设置
   // 渲染进程直接调 remote.setBounds 在部分环境（Windows + 高DPI/无边框窗口）会静默失败
-  // 设置期间屏蔽尺寸记录，否则这次程序改动会被误当成用户拖动存进设置
-  suppressSizeSave++;
+  // 登记程序设置的目标尺寸，resize 事件到达时据此跳过记录（见 saveWindowSizeOnResize）
+  programSizes[targetWindowType] = [targetSize[0], targetSize[1]];
   ipc.send('resize-main-window', {
     x: targetPosition[0],
     y: targetPosition[1],
     width: targetSize[0],
     height: targetSize[1]
   });
-  // 留出足够时间让 resize 事件和 600ms 防抖都走完
-  setTimeout(() => {
-    suppressSizeSave = Math.max(0, suppressSizeSave - 1);
-  }, 1200);
 
   currentWindowType = targetWindowType;
   utils.log(`窗口：切换为 ${targetWindowType} → ${targetSize[0]}x${targetSize[1]} @ ${targetPosition[0]},${targetPosition[1]}`);
@@ -522,17 +570,14 @@ function fitWindowToVideoShape(videoW, videoH) {
 
   clearTimeout(videoFitTimer);
   videoFitTimer = setTimeout(() => {
-    // 屏蔽尺寸记录，避免这次程序改尺寸被当成用户拖动存进 windowSizeMini
-    suppressSizeSave++;
+    // 登记程序设置的目标尺寸，避免这次程序改尺寸被当成用户拖动存进 windowSizeMini
+    programSizes[currentWindowType] = [width, height];
     ipc.send('resize-main-window', {
       x: targetPosition[0],
       y: targetPosition[1],
       width: width,
       height: height
     });
-    setTimeout(() => {
-      suppressSizeSave = Math.max(0, suppressSizeSave - 1);
-    }, 1200);
     currentVideoShape = shapeKey;
     lastFitSize = [width, height];
     utils.log(`视频形状适配：${isVertical ? '竖版' : '横版'} ${videoW}x${videoH}（比例 ${ratio.toFixed(2)}）→ 窗口 ${width}x${height}`);
@@ -557,6 +602,13 @@ function initActionOnPlayerReady() {
     } else if( e.channel === 'home-refreshed' ) {
       utils.log('首页推荐已刷新');
       wrapper.classList.remove('loading');
+    } else if( e.channel === 'speed-changed' ) {
+      // 用户在 B 站播放器自带的倍速菜单里改了速度，同步更新顶栏按钮显示
+      const rate = e.args && e.args[0];
+      if( typeof rate === 'number' && rate > 0 && !v.disableSpeedButton ) {
+        v.currentSpeed = rate;
+        utils.log(`倍速：B站播放器侧改为 ${v.fmtSpeed(rate)}`);
+      }
     } else if( e.channel === 'video-ratio' ) {
       const info = e.args && e.args[0];
       if( info ) {
@@ -608,6 +660,15 @@ function initActionOnWebviewNavigate() {
       // 离开播放页，重置形状记录
       currentVideoShape = null;
       lastFitSize = null;
+    }
+    // 倍速按钮只在视频/番剧页可用；不跨视频记忆，每个视频都重置为 1.0
+    // （同时覆盖 B 站播放器自己的倍速记忆，保证「换视频就要重选」）
+    const speedPageOk = url.indexOf('/video/') > -1 || url.indexOf('bangumi/play/') > -1;
+    v.disableSpeedButton = !speedPageOk;
+    v.speedMenuShow = false;
+    v.currentSpeed = 1;
+    if( speedPageOk ) {
+      wv.send('set-speed', 1);
     }
     ipc.send('url-changed', url);
   });

@@ -1,6 +1,51 @@
 const ipc = require('electron').ipcRenderer;
 
 window.addEventListener('DOMContentLoaded', function() {
+  // ===== 倍速控制（所有页面都注册监听，宿主会按页面类型决定是否启用） =====
+  // 宿主顶栏选倍速后发 set-speed 过来，直接设 video.playbackRate。
+  // 相比模拟点击 B 站原生倍速菜单，这种方式不依赖播放器 UI 结构，改版也不受影响。
+  let desiredRate = 1;
+  let lastSelfSet = 0;
+  let enforceUntil = 0;
+  const applyRate = () => {
+    const v = document.querySelector('video');
+    if( !v ) return;
+    if( Math.abs(v.playbackRate - desiredRate) > 0.01 ) {
+      lastSelfSet = Date.now();
+      v.playbackRate = desiredRate;
+    }
+  };
+  ipc.on('set-speed', (ev, s) => {
+    if( typeof s !== 'number' || !(s > 0) ) return;
+    desiredRate = s;
+    // 播放器初始化时可能用自己的记忆倍速覆盖回来，开一段保护窗口强制以宿主的值为准
+    enforceUntil = Date.now() + 5000;
+    applyRate();
+    [600, 1500, 3000].forEach(t => setTimeout(applyRate, t));
+  });
+  // 换P、切清晰度、自动跳下一集都会重建 video 元素，
+  // loadedmetadata 事件不冒泡，用捕获方式在 document 上统一接住
+  document.addEventListener('loadedmetadata', () => {
+    enforceUntil = Math.max(enforceUntil, Date.now() + 2000);
+    applyRate();
+  }, true);
+  // ratechange 双向同步：
+  // - 保护窗口内（刚设置完/刚重建完），B站的覆盖会被改回 desiredRate
+  // - 窗口之外的变化视为用户在 B 站原生菜单里手动改的，报给宿主刷新按钮显示
+  document.addEventListener('ratechange', () => {
+    const v = document.querySelector('video');
+    if( !v ) return;
+    if( Date.now() - lastSelfSet < 150 ) return;
+    if( Date.now() < enforceUntil ) {
+      applyRate();
+      return;
+    }
+    if( Math.abs(v.playbackRate - desiredRate) > 0.01 ) {
+      desiredRate = v.playbackRate;
+      ipc.sendToHost('speed-changed', v.playbackRate);
+    }
+  }, true);
+
   // 普通视频页：自动最大化播放器
   if( window.location.href.indexOf('video/av') > -1 || 
       window.location.href.indexOf('video/BV') > -1 ||
@@ -432,7 +477,10 @@ window.addEventListener('DOMContentLoaded', function() {
   // 首页：支持「刷新主页」换一批推荐
   // B 站移动版首页的推荐是服务端直出且对同一用户固定返回的，单纯 reload 拿不到新内容，
   // 只有带递增 fresh_idx 的推荐接口才会每次返回不同的视频，所以这里直接用接口数据替换列表
-  else if( window.location.pathname == '/' || /\/index\.html$/.test(window.location.pathname) ) {
+  // 注意必须限定 m.bilibili.com：t.bilibili.com 的 pathname 也是 '/'，
+  // 不加域名判断会抢先命中，导致后面的动态页适配分支永远走不到
+  else if( window.location.hostname === 'm.bilibili.com' &&
+           (window.location.pathname == '/' || /\/index\.html$/.test(window.location.pathname)) ) {
     const RECOMMEND_API = 'https://api.bilibili.com/x/web-interface/index/top/feed/rcmd';
     let freshIdx = 1;
     let refreshing = false;
@@ -539,11 +587,16 @@ window.addEventListener('DOMContentLoaded', function() {
   }
 
   // 动态页重做样式
+  // B 站已把 t.bilibili.com 统一为桌面版布局（移动 UA 也返回桌面页），
+  // 桌面导航和左右两侧栏在 bilimini 的窄窗口里完全放不下（文档宽 1043px vs 窗口 495px），
+  // 所以隐藏桌面导航和两侧栏，让中间的动态流铺满窗口
   else if( window.location.href.includes('t.bilibili.com/?tab=8') ) {
     const style = document.createElement('style');
-    style.innerHTML = '#bili-header-m, .left-panel, .right-panel, .center-panel > .section-block, .sticky-bar { display: none !important }' +
-                      '.home-content, .center-panel { width: 100% !important; }' +
-                      '.card { min-width: 0 !important;}'
+    style.innerHTML = '#internationalHeader { display: none !important; }' +
+                      '.bili-dyn-home--member aside.left, .bili-dyn-home--member aside.right { display: none !important; }' +
+                      '.bili-dyn-home--member main { width: 100% !important; max-width: none !important; padding: 0 8px !important; box-sizing: border-box !important; }' +
+                      '.bili-dyn-version-control { display: none !important; }' +
+                      'body { overflow-x: hidden !important; }';
     document.head.appendChild(style)
   }
 

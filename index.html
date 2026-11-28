@@ -37,12 +37,17 @@
 			</div>
 			<div id="dragzone">这里可以拖拽</div>
 			<div id="icon-bar-right">
+				<span id="app-speed" title="倍速播放" class="top-btn" :disabled="disableSpeedButton" @mouseenter="showSpeedMenu" @mouseleave="scheduleHideSpeedMenu" @click="toggleSpeedMenu">{{ fmtSpeed(currentSpeed) }}</span>
 				<span id="app-danmaku" title="开/关弹幕" class="top-btn icon-btn" @click="toggleDanmaku" :disabled="disableDanmakuButton">弹</span>
 				<span id="app-part" title="分P列表" class="top-btn icon-btn" @click="toggleSelectPartWindow" :disabled="disablePartButton">P</span>
 				<span id="app-feed" title="动态" class="top-btn icon-btn" @click="showFeed"></span>
 				<span id="app-config" title="设置" class="top-btn icon-btn" @click="toggleConfig"></span>
 				<span id="app-about" title="关于" class="top-btn icon-btn" @click="showAbout">?</span>
 				<span id="app-close" title="退出" class="top-btn icon-btn" @click="turnOff">x</span>
+			</div>
+			<!-- 倍速下拉菜单：挂在顶栏上，展开时悬浮在 webview 之上 -->
+			<div id="speed-menu" :class="{active: speedMenuShow}" @mouseenter="cancelHideSpeedMenu" @mouseleave="scheduleHideSpeedMenu">
+				<div class="speed-item" v-for="s in speedOptions" :key="s" :class="{on: s === currentSpeed}" @click="selectSpeed(s)">{{ fmtSpeed(s) }}</div>
 			</div>
 		</div>
 
