@@ -35,7 +35,6 @@
 					<svg viewBox="0 0 16 16" width="9" height="9"><path fill="currentColor" d="M8 2.5a5.5 5.5 0 1 0 5.2 7.3.6.6 0 0 1 1.1.4A6.7 6.7 0 1 1 8 1.3V.4c0-.2.2-.3.4-.2l2.2 1.5c.1.1.1.3 0 .4L8.4 3.6c-.2.1-.4 0-.4-.2v-.9z"/></svg>
 				</span>
 			</div>
-			<div id="dragzone">这里可以拖拽</div>
 			<div id="icon-bar-right">
 				<span id="app-speed" title="倍速播放" class="top-btn" :disabled="disableSpeedButton" @mouseenter="showSpeedMenu" @mouseleave="scheduleHideSpeedMenu" @click="toggleSpeedMenu">{{ fmtSpeed(currentSpeed) }}</span>
 				<span id="app-danmaku" title="开/关弹幕" class="top-btn icon-btn" @click="toggleDanmaku" :disabled="disableDanmakuButton">弹</span>

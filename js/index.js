@@ -30,7 +30,13 @@ function normalizeUrl(url) {
     u.searchParams.delete('timestamp');
     u.searchParams.delete('unique_k');
     let search = u.searchParams.toString();
-    return u.origin + u.pathname + (search ? '?' + search : '') + u.hash;
+    // 统一尾斜杠：/video/BVxxx/ 与 /video/BVxxx 视为同一页面（B站两种写法都会出现）
+    let path = u.pathname.replace(/\/+$/, '') || '/';
+    // m.bilibili.com/index.html 与 m.bilibili.com/ 是同一页面
+    if( u.hostname === 'm.bilibili.com' && path === '/index.html' ) {
+      path = '/';
+    }
+    return u.origin + path + (search ? '?' + search : '') + u.hash;
   } catch(e) {
     return url;
   }
@@ -45,6 +51,28 @@ var _history = {
   lastLoadedUrl: '', // 这是最后一次webview实际加载完成的url，这个是在下面webview的did-finish-load事件的时候更新的
   ignoreUntil: 0, // 在这之前 dirty-check 暂停工作，用于避免程序主动跳转被误判成用户操作
   pendingRefreshHome: false, // 标记「回到首页后还要再换一批推荐」
+  // 带「到达校验」的加载：loadURL 在 webview 还有未完成的跳转链时（比如B站 www→m 的302
+  // 正在重定向）会被 Electron 静默丢弃，页面就会卡在重定向后的地址上。
+  // 所以发出加载后定时核对 webview 的实际地址，没到达就重发（最多3次）
+  lastNavigatedUrl: '', // 最近一次程序意图加载的最终地址（校验用，区别于 lastTarget 的原始地址）
+  navigateWithVerify: function(url, ua) {
+    _history.lastNavigatedUrl = url;
+    wv.loadURL(url, { userAgent: ua });
+    const verify = (n) => {
+      setTimeout(() => {
+        // 期间用户又触发了别的跳转（意图地址变了），放弃本次校验
+        if( normalizeUrl(_history.lastNavigatedUrl) !== normalizeUrl(url) ) return;
+        if( normalizeUrl(wv.getURL()) === normalizeUrl(url) ) return;
+        // webview 还在加载中就再等一轮
+        if( wv.isLoading() && n < 3 ) { verify(n + 1); return; }
+        utils.log(`导航校验：目标 ${url} 未生效（当前 ${wv.getURL()}），第 ${n + 1} 次重试`);
+        _history.lastNavigatedUrl = url;
+        wv.loadURL(url, { userAgent: ua });
+        if( n < 3 ) verify(n + 1);
+      }, 1800);
+    };
+    verify(0);
+  },
   go: function(target, noNewHistory) {
     // 防止重复加载同页面
     // 用规范化后的地址比较，避免 B 站自己 push 的统计参数（vd_source 等）造成误判重复加载
@@ -71,24 +99,18 @@ var _history = {
       // case 1 普通视频播放页，转跳对应pc页
       // 先切窗口再加载，避免页面按旧尺寸渲染完再缩小，看起来像闪了一下
       applyWindowType(getWindowTypeByUrl(videoUrlPrefix + vid));
-      wv.loadURL(videoUrlPrefix + vid, {
-        userAgent: userAgent.desktop
-      });
+      _history.navigateWithVerify(videoUrlPrefix + vid, userAgent.desktop);
       !noNewHistory && _history.add(videoUrlPrefix + vid);
       v.disableDanmakuButton = false;
       utils.log(`路由：类型① 视频详情页\n原地址：${target}\n转跳地址：${videoUrlPrefix+vid}`);
     } else if( target.indexOf('bangumi/play/') > -1 ) {
       // case 2 番剧播放页
-      wv.loadURL(target, {
-        userAgent: userAgent.desktop
-      });
+      _history.navigateWithVerify(target, userAgent.desktop);
       !noNewHistory && _history.add(target);
       v.disableDanmakuButton = false;
       utils.log(`路由：类型② 番剧播放页\n地址：${target}`);
     } else if ( live = /live\.bilibili\.com\/(h5\/||blanc\/)?(\d+).*/.exec(target) ) {
-      wv.loadURL(liveUrlPrefix + live[2], {
-        userAgent: userAgent.desktop
-      });
+      _history.navigateWithVerify(liveUrlPrefix + live[2], userAgent.desktop);
       !noNewHistory && _history.add(liveUrlPrefix + live[2]);
       v.disableDanmakuButton = false;
       utils.log(`路由：类型③ 直播页面\n原地址：${target}\n转跳地址：${liveUrlPrefix+live[2]}`);
@@ -100,9 +122,7 @@ var _history = {
       // 所以这里转成移动端个人空间页，由 inject.js 在其 tab 栏补「收藏」入口并在页内渲染收藏内容
       const mid = /space\.bilibili\.com\/(\d+)/.exec(target);
       const mobileSpace = mid ? `https://m.bilibili.com/space/${mid[1]}` : target;
-      wv.loadURL(mobileSpace, {
-        userAgent: userAgent.mobile
-      });
+      _history.navigateWithVerify(mobileSpace, userAgent.mobile);
       !noNewHistory && _history.add(mobileSpace);
       ipc.send('update-part', null);
       v.disableDanmakuButton = true;
@@ -110,18 +130,14 @@ var _history = {
     } else if( target.indexOf('www.bilibili.com/list/') > -1 ||
                target.indexOf('www.bilibili.com/medialist/') > -1 ) {
       // 合集/收藏列表页没有移动版，只能用桌面 UA 打开
-      wv.loadURL(target, {
-        userAgent: userAgent.desktop
-      });
+      _history.navigateWithVerify(target, userAgent.desktop);
       !noNewHistory && _history.add(target);
       ipc.send('update-part', null);
       v.disableDanmakuButton = true;
       utils.log(`路由：类型④ 合集/收藏列表（桌面页）\n地址：${target}`);
     } else {
       // 其他链接不做操作直接打开
-      wv.loadURL(target, {
-        userAgent: userAgent.mobile
-      });
+      _history.navigateWithVerify(target, userAgent.mobile);
       !noNewHistory && _history.add(target);
       // 清除分p
       ipc.send('update-part', null);
