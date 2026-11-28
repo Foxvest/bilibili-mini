@@ -93,17 +93,6 @@ body {
   left: 0;
   width: 100%;
   z-index: 9;
-  /* 整条顶栏作为窗口拖拽区（无边框窗口移动窗口的唯一途径）；
-     按钮组单独豁免（见下方 no-drag）。
-     旧的 #dragzone 方案（中间 50% 宽的拖拽 div）在窄窗口下会盖住
-     倍速/弹幕/P 按钮，导致悬停不高亮、点击无反应，已废弃 */
-  -webkit-app-region: drag;
-}
-/* 按钮组与倍速下拉菜单必须豁免拖拽，否则悬停/点击事件会被拖拽区吞掉 */
-#icon-bar-left,
-#icon-bar-right,
-#speed-menu {
-  -webkit-app-region: no-drag;
 }
 body.win .showAbout #topbar {
   top: -37px;
@@ -228,6 +217,25 @@ body.win .showAbout #topbar {
 .speed-item.on {
   color: #fff;
   font-weight: bold;
+}
+/* 窗口拖拽区：绝对定位、左右避开两侧按钮组，
+   任何窗口宽度下都不会盖住按钮（旧版 50% 居中方案在窄窗口会盖住倍速/弹幕/P）；
+   文字隐藏（用户要求），仅保留拖拽能力 */
+#dragzone {
+  -webkit-user-select: none;
+  -webkit-app-region: drag;
+  position: absolute;
+  left: 82px;
+  right: 164px;
+  top: 0;
+  height: 36px;
+  margin: 0;
+  color: transparent;
+  cursor: move;
+  text-align: center;
+  line-height: 36px;
+  overflow: hidden;
+  font-size: 0;
 }
 /* webview */
 #wv {

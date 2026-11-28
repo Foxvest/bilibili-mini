@@ -212,6 +212,25 @@ body.win .showAbout #topbar{
     font-weight: bold;
   }
 }
+/* 窗口拖拽区：绝对定位、左右避开两侧按钮组，
+   任何窗口宽度下都不会盖住按钮（旧版 50% 居中方案在窄窗口会盖住倍速/弹幕/P）；
+   文字隐藏（用户要求），仅保留拖拽能力 */
+#dragzone{
+  -webkit-user-select: none;
+  -webkit-app-region: drag;
+  position: absolute;
+  left: 82px;
+  right: 164px;
+  top: 0;
+  height: 36px;
+  margin: 0;
+  color: transparent;
+  cursor: move;
+  text-align: center;
+  line-height: 36px;
+  overflow: hidden;
+  font-size: 0;
+}
 
 /* webview */
 #wv{
