@@ -590,11 +590,15 @@ window.addEventListener('DOMContentLoaded', function() {
   // B 站已把 t.bilibili.com 统一为桌面版布局（移动 UA 也返回桌面页），
   // 桌面导航和左右两侧栏在 bilimini 的窄窗口里完全放不下（文档宽 1043px vs 窗口 495px），
   // 所以隐藏桌面导航和两侧栏，让中间的动态流铺满窗口
+  // 另外B站给发布框、动态列表等写死了 min-width:632px / width:600px，
+  // 用户手动缩小窗口后内容不会回流、右侧被裁掉，所以整棵树强制流式：
+  // min-width:0 允许收缩，max-width:100% 保证任何元素都不超出父容器
   else if( window.location.href.includes('t.bilibili.com/?tab=8') ) {
     const style = document.createElement('style');
     style.innerHTML = '#internationalHeader { display: none !important; }' +
                       '.bili-dyn-home--member aside.left, .bili-dyn-home--member aside.right { display: none !important; }' +
-                      '.bili-dyn-home--member main { width: 100% !important; max-width: none !important; padding: 0 8px !important; box-sizing: border-box !important; }' +
+                      '.bili-dyn-home--member main { width: 100% !important; max-width: none !important; min-width: 0 !important; padding: 0 8px !important; box-sizing: border-box !important; }' +
+                      '.bili-dyn-home--member main * { min-width: 0 !important; max-width: 100% !important; }' +
                       '.bili-dyn-version-control { display: none !important; }' +
                       'body { overflow-x: hidden !important; }';
     document.head.appendChild(style)
